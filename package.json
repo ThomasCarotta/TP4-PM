@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "@nestjs/microservices": "^11.1.6",
+    "@nestjs/platform-socket.io": "^11.1.6",
+    "@nestjs/websockets": "^11.1.6",
+    "kafkajs": "^2.2.4",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.0"
+  }
+}
