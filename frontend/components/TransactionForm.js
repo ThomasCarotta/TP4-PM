@@ -4,7 +4,7 @@ import { View, Text, TextInput, Button, Alert, StyleSheet } from 'react-native';
 import axios from 'axios';
 import { BACKEND_HOST } from '../utils/config';
 
-const ALLOWED_USERS = ['user1', 'user2', 'admin']; // hardcodeado para validación UI
+const ALLOWED_USERS = ['user1', 'user2', 'admin'];
 
 export default function TransactionForm({ onNewTransaction }) {
   const [fromAccount, setFromAccount] = useState('');
@@ -19,16 +19,24 @@ export default function TransactionForm({ onNewTransaction }) {
       Alert.alert('Validación', 'Completá desde, hacia y monto.');
       return false;
     }
+    
     const amt = Number(amount);
     if (Number.isNaN(amt) || amt <= 0) {
       Alert.alert('Validación', 'El monto debe ser un número positivo.');
       return false;
     }
-    // regla de negocio UI: usuario debe ser uno de los permitidos (hardcodeado)
+    
+    // Validación adicional: misma cuenta
+    if (fromAccount.trim() === toAccount.trim()) {
+      Alert.alert('Validación', 'No se puede transferir a la misma cuenta.');
+      return false;
+    }
+    
     if (!ALLOWED_USERS.includes(userId)) {
       Alert.alert('Validación', `Usuario inválido. Usuarios permitidos: ${ALLOWED_USERS.join(', ')}`);
       return false;
     }
+    
     return true;
   }
 
@@ -38,30 +46,59 @@ export default function TransactionForm({ onNewTransaction }) {
     setLoading(true);
     try {
       const body = {
-        fromAccount,
-        toAccount,
+        fromAccount: fromAccount.trim(),
+        toAccount: toAccount.trim(),
         amount: Number(amount),
-        currency,
-        userId,
+        currency: currency.trim(),
+        userId: userId.trim(),
       };
+
+      console.log('🔄 Enviando transacción...', body);
 
       const res = await axios.post(`${BACKEND_HOST}/transactions`, body, {
         timeout: 10000,
+        headers: {
+          'Content-Type': 'application/json',
+        }
       });
 
-      // El backend devuelve: { status: 'Transaction Initiated', transactionId }
-      const transactionId = res?.data?.transactionId || res?.data?.id || null;
+      const transactionId = res?.data?.transactionId;
 
-      Alert.alert('Éxito', `Transacción iniciada. ID: ${transactionId || 'desconocido'}`);
-      if (transactionId && onNewTransaction) onNewTransaction(transactionId);
+      if (transactionId) {
+        Alert.alert('✅ Éxito', `Transacción iniciada\nID: ${transactionId}`);
+        if (onNewTransaction) onNewTransaction(transactionId);
+        
+        // Limpiar formulario
+        setFromAccount('');
+        setToAccount('');
+        setAmount('');
+      } else {
+        Alert.alert('⚠️ Advertencia', 'Transacción enviada pero no se recibió ID');
+      }
 
-      // limpiar parcialmente
-      setFromAccount('');
-      setToAccount('');
-      setAmount('');
     } catch (err) {
-      console.error('Error enviando transacción', err?.message || err);
-      Alert.alert('Error', 'No se pudo enviar la transacción. Revisá la consola.');
+      console.error('❌ Error completo:', err);
+      
+      // Manejar diferentes tipos de error
+      if (err.response) {
+        // Error del servidor (400, 500, etc.)
+        const status = err.response.status;
+        const message = err.response.data?.message || err.response.data;
+        
+        if (status === 400) {
+          Alert.alert('❌ Error de validación', message || 'Datos inválidos');
+        } else if (status === 500) {
+          Alert.alert('❌ Error del servidor', 'Intente nuevamente');
+        } else {
+          Alert.alert('❌ Error', message || `Error ${status}`);
+        }
+      } else if (err.request) {
+        // Error de conexión
+        Alert.alert('🌐 Error de conexión', 'No se pudo conectar al servidor');
+      } else {
+        // Otros errores
+        Alert.alert('❌ Error', err.message || 'Error desconocido');
+      }
     } finally {
       setLoading(false);
     }
@@ -112,7 +149,12 @@ export default function TransactionForm({ onNewTransaction }) {
       />
 
       <View style={styles.button}>
-        <Button title={loading ? 'Enviando...' : 'Enviar transacción'} onPress={handleSubmit} disabled={loading} />
+        <Button 
+          title={loading ? 'Enviando...' : 'Enviar transacción'} 
+          onPress={handleSubmit} 
+          disabled={loading} 
+          color="#007AFF"
+        />
       </View>
     </View>
   );
@@ -121,22 +163,30 @@ export default function TransactionForm({ onNewTransaction }) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#ffffff',
-    padding: 12,
-    borderRadius: 10,
+    padding: 16,
+    borderRadius: 12,
     shadowColor: '#000',
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.1,
     shadowRadius: 6,
-    elevation: 2,
+    elevation: 3,
+    marginBottom: 12,
   },
-  title: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
+  title: { 
+    fontSize: 18, 
+    fontWeight: '700', 
+    marginBottom: 16,
+    color: '#1c1c1e'
+  },
   input: {
     borderWidth: 1,
-    borderColor: '#e2e6ef',
-    padding: 10,
+    borderColor: '#c7c7cc',
+    padding: 12,
     borderRadius: 8,
-    marginBottom: 8,
+    marginBottom: 12,
+    fontSize: 16,
+    backgroundColor: '#f9f9f9'
   },
   button: {
-    marginTop: 6,
+    marginTop: 8,
   },
 });

@@ -23,7 +23,7 @@ export class GatewayGateway implements OnGatewayConnection, OnGatewayDisconnect 
     logLevel: 1
   });
   private consumer = this.kafka.consumer({ 
-    groupId: 'gateway-group-v2' // ← Cambiar groupId
+    groupId: 'gateway-group-v3'
   });
   private userSockets = new Map<string, string>();
   private isKafkaConnected = false;
@@ -44,6 +44,9 @@ export class GatewayGateway implements OnGatewayConnection, OnGatewayDisconnect 
       console.log('✅ Gateway conectado a Kafka - Escuchando eventos...');
       this.isKafkaConnected = true;
 
+      // Notificar a todos los clientes conectados
+      this.server.emit('kafkaStatus', { connected: true });
+
       await this.consumer.run({
         eachMessage: async ({ message }) => {
           try {
@@ -54,14 +57,35 @@ export class GatewayGateway implements OnGatewayConnection, OnGatewayDisconnect 
             
             console.log(`📨 Evento recibido de Kafka: ${event.eventType}`);
             
-            // Buscar userId en el payload
-            const userId = event.payload?.userId;
+            // BUSCAR USERID EN DIFERENTES UBICACIONES
+            let userId = null;
+            
+            // Opción 1: En el payload del evento
+            if (event.payload && event.payload.userId) {
+              userId = event.payload.userId;
+            }
+            // Opción 2: En el envelope del evento (si existe)
+            else if (event.userId) {
+              userId = event.userId;
+            }
+            
+            console.log(`👤 UserId encontrado: ${userId}`);
+            
             if (userId) {
               const socketId = this.userSockets.get(userId);
               if (socketId) {
                 this.server.to(socketId).emit('transactionEvent', event);
                 console.log(`📤 Evento enviado a usuario ${userId}: ${event.eventType}`);
+              } else {
+                console.log(`❌ No hay socket para usuario: ${userId}`);
+                // ENVIAR A TODOS LOS CLIENTES COMO FALLBACK
+                this.server.emit('transactionEvent', event);
+                console.log(`📤 Evento enviado a todos los clientes: ${event.eventType}`);
               }
+            } else {
+              console.log('❌ No se encontró userId en el evento, enviando a todos');
+              // ENVIAR A TODOS LOS CLIENTES SI NO HAY USERID
+              this.server.emit('transactionEvent', event);
             }
             
           } catch (error) {
@@ -72,14 +96,14 @@ export class GatewayGateway implements OnGatewayConnection, OnGatewayDisconnect 
     } catch (error) {
       console.error('❌ Error conectando Gateway a Kafka:', error.message);
       this.isKafkaConnected = false;
-      // Reintentar después de 5 segundos
+      this.server.emit('kafkaStatus', { connected: false });
       setTimeout(() => this.setupKafkaConsumer(), 5000);
     }
   }
 
   async handleConnection(client: Socket) {
     console.log(`🔌 Cliente conectado: ${client.id}`);
-    
+
     // Informar estado de Kafka
     client.emit('kafkaStatus', { 
       connected: this.isKafkaConnected 

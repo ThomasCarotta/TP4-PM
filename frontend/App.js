@@ -9,12 +9,13 @@ export default function App() {
   const [eventsMap, setEventsMap] = useState({});
   const [selectedTransactionId, setSelectedTransactionId] = useState(null);
   const [socketConnected, setSocketConnected] = useState(false);
+  const [kafkaConnected, setKafkaConnected] = useState(false);
 
   useEffect(() => {
     const socket = initSocket();
 
     socket.on('connect', () => {
-      console.log('✅ Conectado al WebSocket');
+      console.log('✅ Conectado al WebSocket:', socket.id);
       setSocketConnected(true);
       
       // Suscribirse con userId por defecto
@@ -24,6 +25,7 @@ export default function App() {
     socket.on('disconnect', () => {
       console.log('❌ Desconectado del WebSocket');
       setSocketConnected(false);
+      setKafkaConnected(false);
     });
 
     socket.on('connected', (data) => {
@@ -32,6 +34,11 @@ export default function App() {
 
     socket.on('subscribed', (data) => {
       console.log('📡 Suscripción confirmada para usuario:', data.userId);
+    });
+
+    socket.on('kafkaStatus', (data) => {
+      console.log('📊 Estado de Kafka:', data.connected ? 'Conectado' : 'Desconectado');
+      setKafkaConnected(data.connected);
     });
 
     // Recibir eventos de transacciones
@@ -46,7 +53,7 @@ export default function App() {
         const newItem = { 
           ...event, 
           receivedAt: Date.now(),
-          type: event.eventType // ← Normalizar nombre
+          type: event.eventType
         };
         return { ...prev, [txId]: [...prevList, newItem] };
       });
@@ -68,11 +75,18 @@ export default function App() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
+      
+      {/* Header con estados de conexión */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>TP4 — Simulador de Transacciones</Text>
-        <Text style={[styles.connectionStatus, socketConnected ? styles.connected : styles.disconnected]}>
-          {socketConnected ? '✅ Conectado' : '❌ Desconectado'}
-        </Text>
+        <View style={styles.statusContainer}>
+          <Text style={[styles.status, socketConnected ? styles.connected : styles.disconnected]}>
+            WebSocket: {socketConnected ? '✅' : '❌'}
+          </Text>
+          <Text style={[styles.status, kafkaConnected ? styles.connected : styles.disconnected]}>
+            Kafka: {kafkaConnected ? '✅' : '❌'}
+          </Text>
+        </View>
       </View>
 
       <View style={styles.formContainer}>
@@ -92,12 +106,45 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f6f7fb', padding: 12 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
-  connectionStatus: { fontSize: 12, fontWeight: '600' },
-  connected: { color: 'green' },
-  disconnected: { color: 'red' },
-  formContainer: { marginBottom: 12 },
-  timelineContainer: { flex: 1 },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#f6f7fb', 
+    padding: 12 
+  },
+  header: { 
+    marginBottom: 16 
+  },
+  headerTitle: { 
+    fontSize: 20, 
+    fontWeight: '700', 
+    textAlign: 'center',
+    color: '#1c1c1e',
+    marginBottom: 8
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16
+  },
+  status: {
+    fontSize: 12,
+    fontWeight: '600',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  connected: { 
+    backgroundColor: '#d4edda', 
+    color: '#155724' 
+  },
+  disconnected: { 
+    backgroundColor: '#f8d7da', 
+    color: '#721c24' 
+  },
+  formContainer: { 
+    marginBottom: 16 
+  },
+  timelineContainer: { 
+    flex: 1 
+  },
 });
