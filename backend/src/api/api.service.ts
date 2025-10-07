@@ -15,7 +15,7 @@ export class ApiService {
       payload: data,
     };
 
-    await this.kafkaService.emit('txn.commands', event, transactionId);
+    await this.kafkaService.emit('txn.commands', event);
 
     return { status: 'Transaction Initiated', transactionId };
   }

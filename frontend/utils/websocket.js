@@ -1,46 +1,58 @@
-// frontend/utils/websocket.js
 import { io } from 'socket.io-client';
 import { SOCKET_IO_HOST } from './config';
 
 let socket = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
-/**
- * Inicializa la conexión (idempotente).
- * Llamar desde App.js una vez.
- */
 export function initSocket() {
   if (socket) return socket;
 
-  // reconexiones automáticas activadas por defecto
+  console.log('🔌 Conectando WebSocket a:', SOCKET_IO_HOST);
+  
   socket = io(SOCKET_IO_HOST, {
-    transports: ['websocket'],
-    reconnectionAttempts: 5,
+    transports: ['websocket', 'polling'],
+    reconnectionAttempts: MAX_RECONNECT_ATTEMPTS,
     timeout: 10000,
   });
 
   socket.on('connect', () => {
-    console.log('🔌 Socket conectado:', socket.id);
+    console.log('✅ Conectado al WebSocket:', socket.id);
+    reconnectAttempts = 0;
+    
+    // Suscribirse automáticamente con userId por defecto
+    socket.emit('subscribe', { userId: 'user1' });
   });
 
   socket.on('disconnect', (reason) => {
-    console.log('🔌 Socket desconectado:', reason);
+    console.log('❌ Desconectado del WebSocket:', reason);
   });
 
   socket.on('connect_error', (err) => {
-    console.warn('🔌 Error conexión socket:', err.message || err);
+    reconnectAttempts++;
+    console.warn('🔌 Error conexión socket (intento ${reconnectAttempts}):', err.message);
+  });
+
+  socket.on('connected', (data) => {
+    console.log('📡 Mensaje del servidor:', data.message);
+  });
+
+  socket.on('subscribed', (data) => {
+    console.log('📡 Suscripción confirmada:', data);
+  });
+
+  socket.on('kafkaStatus', (data) => {
+    console.log('📊 Estado de Kafka:', data.connected ? 'Conectado' : 'Desconectado');
   });
 
   return socket;
 }
 
-/**
- * Subscribe callback recibe (event) cada vez que llega un transactionEvent
- * Retorna función para unsubscribe.
- */
 export function subscribeToTransactionEvents(callback) {
   const s = initSocket();
   const handler = (event) => {
     try {
+      console.log('📨 Evento recibido:', event.eventType);
       callback(event);
     } catch (e) {
       console.error('Error en callback de evento', e);
